@@ -870,30 +870,28 @@ async function shortenUrl() {
     return;
   }
 
-  const requestData = { url: longUrl };
+  const params = new URLSearchParams({ url: longUrl });
   if (customAlias) {
-    requestData.domain = 'tiny.one';
-    requestData.alias = customAlias;
+    params.append('alias', customAlias);
   }
 
   showResult('⏳ Shortening...');
 
   try {
-    const res = await fetch('https://api.tinyurl.com/create', {
+    const res = await fetch('https://spoo.me/', {
       method: 'POST',
       headers: {
-        'accept': 'application/json',
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
+        'Accept': 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded'
       },
-      body: JSON.stringify(requestData)
+      body: params
     });
 
     const data = await res.json();
 
-    if (data && data.data && data.data.tiny_url) {
-      const shortLink = data.data.tiny_url;
-      const linkId = data.data.id_string || null;
+    if (res.ok && data.short_url) {
+      const shortLink = data.short_url;
+      const linkId = shortLink; // spoo.me doesn't provide an ID, we'll just use the URL as the ID
 
       // Save last result
       localStorage.setItem('lastShortLink', JSON.stringify({ url: shortLink, id: linkId }));
@@ -904,7 +902,11 @@ async function shortenUrl() {
       // Show result with QR
       showResult(shortLink, linkId);
     } else {
-      const msg = (data && data.errors && data.errors.length) ? data.errors[0].message : 'Something went wrong.';
+      let msg = 'Something went wrong.';
+      if (data) {
+        if (data.AliasError) msg = data.AliasError;
+        else if (data.error) msg = data.error;
+      }
       showError('❌ ' + msg);
     }
 
@@ -963,24 +965,13 @@ async function deleteLink(linkId) {
   showResult('⏳ Deleting...');
 
   try {
-    const res = await fetch(`https://api.tinyurl.com/delete`, {
-      method: 'DELETE',
-      headers: {
-        'accept': 'application/json',
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({ id: linkId })
-    });
-
-    const data = await res.json();
-    if (data && data.data) {
-      showResult('✅ Short link deleted successfully.');
+    // Spoo.me doesn't have an unauthenticated delete endpoint for links.
+    // We'll simulate deletion by removing it from the UI history.
+    setTimeout(() => {
+      showResult('✅ Short link removed from history successfully.');
       removeFromHistoryById(linkId);
       localStorage.removeItem('lastShortLink');
-    } else {
-      showError('❌ ' + JSON.stringify(data));
-    }
+    }, 500);
 
   } catch (error) {
     console.error(error);
